@@ -1,0 +1,93 @@
+name: Build and Release IPA
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_15.0.app
+
+      - name: Build Archive
+        run: |
+          xcodebuild \
+            -project FPSValidator/FPSValidator.xcodeproj \
+            -scheme FPSValidator \
+            -configuration Release \
+            -archivePath build/FPSValidator.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Create Export Options
+        run: |
+          cat > build/ExportOptions.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>development</string>
+              <key>compileBitcode</key>
+              <false/>
+              <key>destination</key>
+              <string>export</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>stripSwiftSymbols</key>
+              <true/>
+              <key>teamID</key>
+              <string></string>
+              <key>thinning</key>
+              <string>&lt;none&gt;</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Export IPA
+        run: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath build/FPSValidator.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Rename IPA
+        run: |
+          mv build/export/*.ipa build/export/FPSValidator.ipa || true
+          if [ ! -f build/export/FPSValidator.ipa ]; then
+            ls -la build/export/
+            exit 1
+          fi
+
+      - name: Get Version
+        id: version
+        run: |
+          VERSION=$(xcodebuild -project FPSValidator/FPSValidator.xcodeproj -showBuildSettings | grep MARKETING_VERSION | tr -d " " | cut -d= -f2)
+          BUILD=$(xcodebuild -project FPSValidator/FPSValidator.xcodeproj -showBuildSettings | grep CURRENT_PROJECT_VERSION | tr -d " " | cut -d= -f2)
+          echo "version=${VERSION}(${BUILD})" >> $GITHUB_OUTPUT
+          echo "tag=v${VERSION}-${BUILD}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: FPSValidator ${{ steps.version.outputs.version }}
+          files: build/export/FPSValidator.ipa
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
