@@ -15,9 +15,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode version
-        run: sudo xcode-select -s /Applications/Xcode_15.0.app
-
       - name: Build Archive
         run: |
           xcodebuild \
@@ -30,49 +27,12 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
 
-      - name: Create Export Options
+      - name: Create IPA
         run: |
-          cat > build/ExportOptions.plist << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>development</string>
-              <key>compileBitcode</key>
-              <false/>
-              <key>destination</key>
-              <string>export</string>
-              <key>signingStyle</key>
-              <string>manual</string>
-              <key>stripSwiftSymbols</key>
-              <true/>
-              <key>teamID</key>
-              <string></string>
-              <key>thinning</key>
-              <string>&lt;none&gt;</string>
-          </dict>
-          </plist>
-          EOF
-
-      - name: Export IPA
-        run: |
-          xcodebuild \
-            -exportArchive \
-            -archivePath build/FPSValidator.xcarchive \
-            -exportOptionsPlist build/ExportOptions.plist \
-            -exportPath build/export \
-            -allowProvisioningUpdates \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO
-
-      - name: Rename IPA
-        run: |
-          mv build/export/*.ipa build/export/FPSValidator.ipa || true
-          if [ ! -f build/export/FPSValidator.ipa ]; then
-            ls -la build/export/
-            exit 1
-          fi
+          mkdir -p build/Payload
+          cp -r build/FPSValidator.xcarchive/Products/Applications/FPSValidator.app build/Payload/
+          cd build
+          zip -r FPSValidator.ipa Payload
 
       - name: Get Version
         id: version
@@ -87,7 +47,7 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: FPSValidator ${{ steps.version.outputs.version }}
-          files: build/export/FPSValidator.ipa
+          files: build/FPSValidator.ipa
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
