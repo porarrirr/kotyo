@@ -61,6 +61,7 @@ class Renderer: NSObject, MTKViewDelegate {
         super.init()
         
         metalView.device = device
+        metalView.delegate = self
         metalView.sampleCount = 1
         metalView.isPaused = false
         metalView.enableSetNeedsDisplay = false
